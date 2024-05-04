@@ -5,7 +5,7 @@ import logging
 # Setup basic configuration for logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def create_spark_session():
+def createSparkSession():
     """
     Create a Spark session configured for Iceberg and S3 (MinIO).
     """
@@ -24,13 +24,10 @@ def create_spark_session():
         .config("spark.hadoop.fs.s3a.aws.credentials.provider", "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider") \
         .getOrCreate()
     
-    # Set the log level to DEBUG to get detailed logs
-    #spark.sparkContext.setLogLevel("DEBUG")
-    
     logging.info("Spark session created successfully.")
     return spark
 
-def define_schema():
+def defineSchema():
     """
     Define the schema used for the lineitem data.
     """
@@ -56,7 +53,7 @@ def define_schema():
     logging.info("Schema defined.")
     return schema
     
-def create_iceberg_table(spark):
+def createIcebergTable(spark):
     logging.info("Creating/checking Iceberg table...")
     spark.sql("""
         CREATE TABLE IF NOT EXISTS spark_catalog.default.lineitem (
@@ -81,11 +78,13 @@ def create_iceberg_table(spark):
             format='orc'
         )
         LOCATION 's3a://warehouse/default/lineitem'
+        TBLPROPERTIES (
+            'write.format.default'='orc'
+        )
     """)
     logging.info("Iceberg table is set up.")
 
-
-def read_and_process_data(spark, schema):
+def readAndProcessData(spark, schema):
     """
     Load data from a CSV file using a predefined schema, process it with Spark and write to Iceberg table.
     """
@@ -97,18 +96,19 @@ def read_and_process_data(spark, schema):
     if count > 0:
         logging.info("Writing data to Iceberg table...")
         df.write.format("iceberg") \
-            .option("write.format.default", "orc") \
+            .option("write.format", "orc") \
             .mode("append") \
             .save("spark_catalog.default.lineitem")
-        logging.info("Data written to Iceberg table successfully.")
+        logging.info("Data written to Iceberg table successfully in ORC format.")
     else:
         logging.warning("No data to write.")
 
+
 def main():
-    spark = create_spark_session()
-    create_iceberg_table(spark)  # Ensure table exists
-    schema = define_schema()
-    read_and_process_data(spark, schema)
+    spark = createSparkSession()
+    schema = defineSchema()
+    createIcebergTable(spark)  # Ensure table exists
+    readAndProcessData(spark, schema)
     spark.stop()
 
 if __name__ == "__main__":
