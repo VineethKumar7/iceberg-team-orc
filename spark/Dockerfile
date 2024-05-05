@@ -51,6 +51,8 @@ RUN mkdir -p /home/spark/scripts
 # Copy necessary config files and scripts to Docker image
 COPY start-spark.sh /opt/
 COPY lineitem.csv /home/spark/scripts/
+COPY customer.csv /home/spark/scripts/
+COPY orders.csv /home/spark/scripts/
 COPY iceberg_orc.py /home/spark/scripts/
 RUN chmod +x /opt/start-spark.sh
 
