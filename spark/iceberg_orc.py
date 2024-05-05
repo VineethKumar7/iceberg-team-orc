@@ -103,22 +103,21 @@ def readAndProcessData(spark, schema):
     else:
         logging.warning("No data to write.")
 
-def simple_query(spark):
-    print(f"showing first few rows")
-    # df = spark.table("spark_catalog.default.lineitem").show()
+def simpleQuery(spark):
+    print("Showing first few rows")
     query = """
             SELECT l_quantity
             FROM spark_catalog.default.lineitem;
             """
     results = spark.sql(query)
-    print(f"{results = }")
+    results.show()  # This will print the DataFrame contents to the console.
 
 def main():
     spark = createSparkSession()
     # schema = defineSchema()
     # createIcebergTable(spark)  # Ensure table exists
     # readAndProcessData(spark, schema)
-    simple_query(spark)
+    simpleQuery(spark)
     spark.stop()
 
 if __name__ == "__main__":
