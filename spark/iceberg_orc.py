@@ -64,7 +64,7 @@ def defineSchema(table_name: str):
             StructField("c_mktsegment", StringType(), True),
             StructField("c_comment", StringType(), True)
         ])
-    elif table_name == "order":
+    elif table_name == "orders":
         schema = StructType([
             StructField("o_orderkey", IntegerType(), True),
             StructField("o_custkey", IntegerType(), True),
@@ -82,15 +82,15 @@ def defineSchema(table_name: str):
     return schema
 def creat_table(table_name, spark):
     if table_name == "lineitem":
-        createIcebergTable_orders(spark)
+        createIcebergTable_lineitem(spark)
     elif table_name == "customer":
         createIcebergTable_customer(spark)
-    elif table_name == "order":
+    elif table_name == "orders":
         createIcebergTable_orders(spark)
     else:
         raise Exception("Table does not exist.")
 
-def createIcebergTable(spark):
+def createIcebergTable_lineitem(spark):
     logging.info("Creating/checking Iceberg table...")
     spark.sql("""
         CREATE TABLE IF NOT EXISTS spark_catalog.default.lineitem (
@@ -119,21 +119,28 @@ def createIcebergTable(spark):
             'write.format.default'='orc'
         )
     """)
-    logging.info("Iceberg table is set up.")
+    # Check if table exists
+    try:
+        spark.sql("SELECT * FROM spark_catalog.default.lineitem LIMIT 1")
+        logging.info("Iceberg table 'lineitem' is set up and accessible.")
+    except Exception as e:
+        logging.error(f"Failed to access table 'lineitem'. Error: {e}")
+        raise Exception("Table 'lineitem' does not exist or is not accessible.")
 
+# Changed to Nullable for all columns since the data has missing values
 def createIcebergTable_orders(spark):
     logging.info("Creating/checking Iceberg table...")
     spark.sql("""
         CREATE TABLE IF NOT EXISTS spark_catalog.default.orders (
-            o_orderkey       INTEGER NOT NULL,
-            o_custkey        INTEGER NOT NULL,
-            o_orderstatus    CHAR(1) NOT NULL,
-            o_totalprice     DECIMAL(15,2) NOT NULL,
-            o_orderdate      DATE NOT NULL,
-            o_orderpriority  CHAR(15) NOT NULL,
-            o_clerk          CHAR(15) NOT NULL,
-            o_shippriority   INTEGER NOT NULL,
-            o_comment        VARCHAR(79) NOT NULL
+            o_orderkey       INTEGER,
+            o_custkey        INTEGER,
+            o_orderstatus    CHAR(1),
+            o_totalprice     DECIMAL(15,2),
+            o_orderdate      DATE,
+            o_orderpriority  CHAR(15),
+            o_clerk          CHAR(15),
+            o_shippriority   INTEGER,
+            o_comment        VARCHAR(79)
         ) USING iceberg
         OPTIONS (
             format='orc'
@@ -145,18 +152,20 @@ def createIcebergTable_orders(spark):
     """)
     logging.info("Iceberg table is set up.")
 
+
+# Changed to Nullable for all columns since the data has missing values
 def createIcebergTable_customer(spark):
     logging.info("Creating/checking Iceberg table...")
     spark.sql("""
         CREATE TABLE IF NOT EXISTS spark_catalog.default.customer (
-            c_custkey     INTEGER NOT NULL,
-            c_name        VARCHAR(25) NOT NULL,
-            c_address     VARCHAR(40) NOT NULL,
-            c_nationkey   INTEGER NOT NULL,
-            c_phone       CHAR(15) NOT NULL,
-            c_acctbal     DECIMAL(15,2)   NOT NULL,
-            c_mktsegment  CHAR(10) NOT NULL,
-            c_comment     VARCHAR(117) NOT NULL
+            c_custkey     INTEGER,
+            c_name        VARCHAR(25),
+            c_address     VARCHAR(40),
+            c_nationkey   INTEGER,
+            c_phone       CHAR(15),
+            c_acctbal     DECIMAL(15,2),
+            c_mktsegment  CHAR(10),
+            c_comment     VARCHAR(117)
         ) USING iceberg
         OPTIONS (
             format='orc'
@@ -174,6 +183,7 @@ def readAndProcessData(spark, schema, table_name):
     """
     Load data from a CSV file using a predefined schema, process it with Spark and write to Iceberg table.
     """
+    logging.info("readAndProcessData...")
     iceberg_table_name = f"spark_catalog.default.{table_name}"
     logging.info("Loading data from CSV...")
     df = spark.read.schema(schema).csv(f'/home/spark/scripts/{table_name}.csv', header=True)
@@ -181,43 +191,78 @@ def readAndProcessData(spark, schema, table_name):
     logging.info(f"Number of rows to write: {count}")
 
     if count > 0:
-        logging.info("Writing data to Iceberg table...")
-        df.write.format("iceberg") \
-            .option("write.format", "orc") \
-            .mode("append") \
-            .save(iceberg_table_name)
-        logging.info("Data written to Iceberg table successfully in ORC format.")
+        try:
+            logging.info(f"Writing data to Iceberg table {iceberg_table_name}...")
+            df.write.format("iceberg") \
+                .option("write.format", "orc") \
+                .mode("append") \
+                .save(iceberg_table_name)
+            logging.info("Data written to Iceberg table successfully in ORC format.")
+        except Exception as e:
+            logging.error(f"Failed to write data to {iceberg_table_name}: {e}")
     else:
         logging.warning("No data to write.")
 
+
+def drop_table_if_exists(spark, table_name):
+    logging.info("drop_table_if_exists...")
+    logging.info(f"Attempting to drop table if it exists: {table_name}")
+    drop_command = f"DROP TABLE IF EXISTS {table_name}"
+    try:
+        spark.sql(drop_command)
+        logging.info(f"Table {table_name} dropped successfully or did not exist.")
+    except Exception as e:
+        logging.error(f"Failed to drop table {table_name}. Error: {e}")
+
+
 def query3_performance(spark):
+    logging.info("query3_performance...")
     st_time = time.time()
     query3 = """
-            select
-              l_orderkey,
-              sum(l_extendedprice * (1 - l_discount)) as revenue,
-              o_orderdate,
-              o_shippriority
-            from customer, orders, lineitem
-            where c_custkey = o_custkey
-              and l_orderkey = o_orderkey
-              and c_mktsegment = 'BUILDING' and o_orderdate < date '1995-03-15' and l_shipdate > date '1995-03-15'
-            group by l_orderkey, o_orderdate, o_shippriority
-            order by revenue desc, o_orderdate
-            limit 10
+            SELECT
+                l_orderkey,
+                SUM(l_extendedprice * (1 - l_discount)) AS revenue,
+                o_orderdate,
+                o_shippriority
+            FROM
+                spark_catalog.default.customer AS customer,
+                spark_catalog.default.orders AS orders,
+                spark_catalog.default.lineitem AS lineitem
+            WHERE
+                customer.c_custkey = orders.o_custkey AND
+                lineitem.l_orderkey = orders.o_orderkey AND
+                customer.c_mktsegment = 'BUILDING' AND
+                orders.o_orderdate < DATE '1995-03-15' AND
+                lineitem.l_shipdate > DATE '1995-03-15'
+            GROUP BY
+                l_orderkey, o_orderdate, o_shippriority
+            ORDER BY
+                revenue DESC, o_orderdate
+            LIMIT 10
             """
-    results = spark.sql(query3)
-    results.show()  # This will print the DataFrame contents to the console.
-    print(f"Baseline Execution time for query: {time.time() - st_time}")
+    try:
+        results = spark.sql(query3)
+        results.show()  # This will print the DataFrame contents to the console.
+        print(f"Baseline Execution time for query: {time.time() - st_time}")
+    except Exception as e:
+        logging.error(f"Failed to execute query: {e}")
+
 
 def main():
     spark = createSparkSession()
+
+    # Drop existing tables to prevent conflicts
+    drop_table_if_exists(spark, "spark_catalog.default.lineitem")
+    drop_table_if_exists(spark, "spark_catalog.default.orders")
+    drop_table_if_exists(spark, "spark_catalog.default.customer")
+
     tables = ["lineitem", "orders", "customer"]
     for table in tables:
+        logging.info("Creating table %s", table)
         schema = defineSchema(table)
         creat_table(table_name=table, spark=spark)  # Ensure table exists
-        schema = defineSchema(table_name=table)
         readAndProcessData(spark, schema, table_name=table)
+
     query3_performance(spark)
     spark.stop()
 
