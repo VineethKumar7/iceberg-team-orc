@@ -243,27 +243,54 @@ def query3_performance(spark):
     try:
         results = spark.sql(query3)
         results.show()  # This will print the DataFrame contents to the console.
-        print(f"Baseline Execution time for query: {time.time() - st_time}")
+        # column_sum = results.agg({"revenue": "sum"}).collect()[0][0]
+        # print("sum of revenue: ", column_sum)
+        # print("type of results: ", type(results))
+        print(f"Baseline Execution time for query3: {time.time() - st_time}")
     except Exception as e:
-        logging.error(f"Failed to execute query: {e}")
+        logging.error(f"Failed to execute query3: {e}")
 
+def query6_performance(spark):
+    logging.info("query6_performance...")
+    st_time = time.time()
+    query6 = """
+        select
+          sum(l_extendedprice * l_discount) as revenue
+        from
+          lineitem
+        where
+          l_shipdate >= date '1994-01-01'
+          and l_shipdate < date '1994-01-01' + interval '1' year
+          and l_discount between 0.06 - 0.01 and 0.06 + 0.01
+          and l_quantity < 24
+        """
+    try:
+        results = spark.sql(query6)
+        results.show()  # This will print the DataFrame contents to the console.
+        # column_sum = results.agg({"revenue": "sum"}).collect()[0][0]
+        # print("sum of revenue: ", column_sum)
+        # print("type of results: ", type(results))
+        print(f"Baseline Execution time for query6: {time.time() - st_time}")
+    except Exception as e:
+        logging.error(f"Failed to execute query6: {e}")
 
 def main():
     spark = createSparkSession()
 
-    # Drop existing tables to prevent conflicts
-    drop_table_if_exists(spark, "spark_catalog.default.lineitem")
-    drop_table_if_exists(spark, "spark_catalog.default.orders")
-    drop_table_if_exists(spark, "spark_catalog.default.customer")
-
-    tables = ["lineitem", "orders", "customer"]
-    for table in tables:
-        logging.info("Creating table %s", table)
-        schema = defineSchema(table)
-        creat_table(table_name=table, spark=spark)  # Ensure table exists
-        readAndProcessData(spark, schema, table_name=table)
+    # # Drop existing tables to prevent conflicts
+    # drop_table_if_exists(spark, "spark_catalog.default.lineitem")
+    # drop_table_if_exists(spark, "spark_catalog.default.orders")
+    # drop_table_if_exists(spark, "spark_catalog.default.customer")
+    #
+    # tables = ["lineitem", "orders", "customer"]
+    # for table in tables:
+    #     logging.info("Creating table %s", table)
+    #     schema = defineSchema(table)
+    #     creat_table(table_name=table, spark=spark)  # Ensure table exists
+    #     readAndProcessData(spark, schema, table_name=table)
 
     query3_performance(spark)
+    query6_performance(spark)
     spark.stop()
 
 if __name__ == "__main__":
