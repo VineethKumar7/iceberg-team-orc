@@ -110,7 +110,9 @@ def createIcebergTable_lineitem(spark):
             l_shipinstruct string,
             l_shipmode string,
             l_comment string
-        ) USING iceberg
+        )
+        USING iceberg
+
         OPTIONS (
             format='orc'
         )

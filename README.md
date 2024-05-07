@@ -68,3 +68,6 @@ curl http://minio:9000/minio/health/live
 ```bash
 ping minio
 ```
+
+### TO DOWNLOAD THE ORC FILES
+Login to minio, go to the warehouse objects, select defaul and click download
